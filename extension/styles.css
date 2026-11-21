@@ -1,0 +1,30 @@
+:root {font: 15px/1.55 "Inter", "Microsoft YaHei", sans-serif; color: #162f2a; background: #f4f7f5; color-scheme: light;}
+* {box-sizing:border-box}
+body {margin:0}
+main {padding:24px}
+.popup {width:330px}
+.options main {max-width:540px; margin:7vh auto; background:white; border:1px solid #d4dfda; border-radius:16px; padding:32px}
+header,.actions {display:flex; align-items:center; justify-content:space-between; gap:12px}
+h1,h2,p {margin:0}
+h1 {font-size:22px; letter-spacing:-.04em}
+h2 {font-size:17px; margin:8px 0 4px}
+p,small {color:#46615a; overflow-wrap:anywhere}
+.options p {margin:12px 0 16px}
+.status {margin:18px 0; padding:15px; border:1px solid #ccdcd5; background:white; border-radius:12px}
+#state {font-size:12px; font-weight:700; color:#176752}
+label {display:block; font-weight:600; margin:18px 0 5px}
+input {width:100%; padding:10px 12px; border:1px solid #acbdb5; border-radius:7px; font:inherit}
+small {display:block; margin-top:4px}
+button {font:inherit; font-weight:600; cursor:pointer; color:white; background:#17634e; border:0; border-radius:8px; padding:9px 18px}
+button:hover {background:#104e3e}
+button:disabled {opacity:.6; cursor:default}
+button.link,button.secondary {background:transparent; color:#175d4a}
+button.link {font-size:13px; padding:4px}
+button.secondary {border:1px solid #acbdb5}
+.actions {justify-content:flex-start; margin-top:22px}
+.popup #action {width:100%}
+.popup .advance-option {display:flex; align-items:center; gap:8px; margin:0 0 16px; cursor:pointer}
+.advance-option input {width:16px; height:16px; margin:0; accent-color:#17634e}
+.popup select {width:100%; margin-bottom:16px; padding:8px; border:1px solid #acbdb5; border-radius:7px; background:white; color:inherit; font:inherit}
+a {display:block; color:#175d4a; text-align:center; margin-top:12px}
+[hidden] {display:none!important}

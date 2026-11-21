@@ -1,0 +1,100 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>模拟课件</title>
+<style>app-mooc-detail-pc,app-mooc-class-quiz,app-object-quiz-item,app-mooc-video {display:block} label {display:inline-block}</style>
+<app-mooc-detail-pc><div class="chapter-title"><span class="chapter-name"></span></div>
+<div id="body"></div><div class="content-footer"><button class="next">下一节</button></div></app-mooc-detail-pc>
+<script>
+const mode = new URL(location.href).searchParams.get("case");
+const count = name => sessionStorage.setItem(name, Number(sessionStorage.getItem(name) || 0) + 1);
+let index = 0, item = 1;
+const title = document.querySelector(".chapter-name"), body = document.querySelector("#body"), next = document.querySelector(".next");
+const question = (n, type, opts) => '<app-object-quiz-item><div class="question-body">' + n + '. 选择示例答案</div><div class="question-options">' +
+  opts.map((x,i) => '<label><input name="q'+ n +'" type="'+ type +'" value="'+i+'">'+x+'</label>').join('') + '</div></app-object-quiz-item>';
+function showAward() {
+  const wrap = document.createElement("div");
+  wrap.className = "mooc-cer aui-dialog";
+  wrap.innerHTML = '<section role="dialog"><div class="ant-modal-content"><button class="ant-modal-close" aria-label="Close">×</button>' +
+    '<h2>恭喜</h2><p>恭喜！ 您已获得《应用程序框架基础》证书。</p><button class="view">查看证书</button></div></section>';
+  document.body.append(wrap);
+  wrap.querySelector(".view").onclick = () => count("viewed");
+  wrap.querySelector(".ant-modal-close").onclick = () => {
+    count("closed");
+    setTimeout(() => wrap.remove(),900);
+  };
+}
+function render() {
+  history.replaceState(null,"",location.pathname + "?case=" + mode + "&choosedChapterIds=ch," + index);
+  title.textContent = mode === "marker" ? "同名小节" : "小节 " + index;
+  next.hidden = next.disabled = index === 1 || mode === "chainSource" || mode === "chainChild";
+  if (mode === "chainIntro") {
+    title.textContent = "";
+    body.innerHTML = '<button id="start">开始学习</button>';
+    body.querySelector("#start").onclick = () => {
+      count("entryClicks");
+      window.open("../mooc/chainChild?case=chainChild", "_blank", "noopener");
+    };
+    return;
+  }
+  if (index === 1 || ["video","marker","playback","chainSource","chainChild"].includes(mode)) {
+    body.innerHTML = '<app-mooc-video><video></video></app-mooc-video>';
+    if (mode === "chainSource") {
+      body.insertAdjacentHTML("beforeend", '<div class="nextClass"><span>下一课</span><button class="nextClassBtn">继续学习</button></div>');
+      body.querySelector(".nextClassBtn").onclick = () => {
+        count("courseClicks");
+        window.open("../introduction/chainChild?case=chainIntro", "_blank", "noopener");
+      };
+    }
+    if ((mode === "marker" || mode === "playback") && index === 0) body.insertAdjacentHTML("beforeend",
+      '<app-mooc-menu><div class="level3 actived"><span name="mooc_no_learning"></span></div></app-mooc-menu>');
+    const v = body.querySelector("video");
+    if (mode === "certificate" && index === 1)
+      v.addEventListener("ended", () => setTimeout(showAward,1800), {once:true});
+    const seconds = mode === "playback" ? 180 : 2;
+    const bytes = new Uint8Array(44 + 8000 * seconds).fill(128), d = new DataView(bytes.buffer);
+    v.addEventListener("seeked", () => sessionStorage.setItem("seek" + index, v.currentTime));
+    function word(off, s) {bytes.set(new TextEncoder().encode(s),off);}
+    word(0,"RIFF"); d.setUint32(4,bytes.length-8,true); word(8,"WAVEfmt ");
+    d.setUint32(16,16,true); d.setUint16(20,1,true); d.setUint16(22,1,true);
+    d.setUint32(24,8000,true); d.setUint32(28,8000,true); d.setUint16(32,1,true); d.setUint16(34,8,true);
+    word(36,"data"); d.setUint32(40,bytes.length-44,true);
+    v.src = URL.createObjectURL(new Blob([bytes],{type:"audio/wav"})); v.load();
+    return;
+  }
+  body.innerHTML = '<app-mooc-class-quiz>' + question(item,"radio",["正确","错误"]) +
+    (mode === "item" ? "" : question(2,"checkbox",["甲","乙","丙"])) +
+    '<button id="submit">'+(mode === "item" ? "提交本题" : "提交")+'</button></app-mooc-class-quiz>';
+  if (mode === "image") document.querySelectorAll(".question-body")[1].append(document.createElement("img"));
+  if (mode === "dynamicChecks" || mode === "ignoredCheck") {
+    const block = body.querySelectorAll(".question-options")[1];
+    block.querySelectorAll("input")[1].checked = true;
+    block.onclick = event => {
+      event.preventDefault();
+      if (!event.target.matches("label")) return;
+      count("toggles");
+      if (mode === "ignoredCheck") return;
+      const index = [...block.children].indexOf(event.target);
+      setTimeout(() => {
+        const labels = [...block.children].map(label => label.cloneNode(true));
+        const input = labels[index].querySelector("input");
+        input.checked = !input.checked;
+        block.replaceChildren(...labels);
+      }, 180);
+    };
+  }
+  document.querySelector("#submit").onclick = () => {
+    count("submits");
+    sessionStorage.setItem("selected", JSON.stringify([...document.querySelectorAll("input:checked")].map(el=>el.value)));
+    if (mode === "unknown") return;
+    if (mode === "item" && item === 1) {item++; render(); return;}
+    const fail = mode === "fail" || (mode === "retry" && !sessionStorage.retries);
+    body.innerHTML = '<app-mooc-class-quiz><div class="quiz-result '+(fail ? 'failed' : 'pass')+'">'+(fail ? '未通过' : '通过')+'</div>' +
+      (fail ? '<button id="retry">再考一次</button>':'')+'</app-mooc-class-quiz>';
+    if (fail) document.querySelector("#retry").onclick = () => {count("retries"); render();};
+    if (mode === "certificate" || mode === "manualQuiz") showAward();
+  };
+}
+next.onclick = () => {
+  if (document.querySelector(".mooc-cer")) count("movedUnderDialog");
+  count("moves"); index++; render();
+};
+render();
+</script></html>

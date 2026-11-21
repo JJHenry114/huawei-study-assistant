@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>学堂随课助手</title><link rel="stylesheet" href="styles.css"></head>
+<body class="popup"><main>
+  <header><h1>随课助手</h1><button class="link" id="settings">接口设置</button></header>
+  <section class="status"><span id="state">读取中</span><h2 id="lesson"></h2><p id="note" role="status"></p></section>
+  <label for="playback">视频播放方式</label>
+  <select id="playback" disabled>
+    <option value="1">原速播放</option>
+    <optgroup id="speeds" label="倍速播放"></optgroup>
+    <option value="end">跳到最后一秒</option>
+  </select>
+  <label class="advance-option"><input id="autoAdvance" type="checkbox" checked disabled>自动进入下一节或下一课</label>
+  <button id="action" disabled>开始学习</button>
+  <a id="course" hidden href="https://developer.huawei.com/consumer/cn/training/classDetail/faa734fca6dd490f9ec6981b5302f238?type=1" target="_blank" rel="noopener">打开班级课程</a>
+</main><script src="shared.js"></script><script src="popup.js"></script></body></html>
