@@ -2,11 +2,12 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><title>随课助手 · 接口设置</title><link rel="stylesheet" href="styles.css"></head>
 <body class="options"><main>
   <h1>AI 接口设置</h1>
-  <p>练习题、选项和重做反馈将发送到下方接口。密钥保存在此浏览器中。</p>
+  <p>题干、选项及其配图将发送到下方接口。随堂练习重做时还会发送答题反馈。密钥保存在此浏览器中。</p>
   <form id="form">
     <label for="url">接口地址</label><input id="url" type="url" required placeholder="https://你的服务地址/v1" spellcheck="false">
     <small>填写服务商的基础地址或完整的 chat/completions 地址。</small>
     <label for="model">模型名称</label><input id="model" required placeholder="服务商提供的模型 ID" spellcheck="false">
+    <small>图片题需要支持图片输入的模型。“测试连接”使用文字题。</small>
     <label for="key">API Key</label><input id="key" required type="password" autocomplete="off" spellcheck="false">
     <div class="actions"><button type="submit">保存设置</button><button type="button" class="secondary" id="test">测试连接</button></div>
     <p id="note" role="status"></p>

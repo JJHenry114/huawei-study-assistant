@@ -63,6 +63,11 @@ function render() {
     (mode === "item" ? "" : question(2,"checkbox",["甲","乙","丙"])) +
     '<button id="submit">'+(mode === "item" ? "提交本题" : "提交")+'</button></app-mooc-class-quiz>';
   if (mode === "image") document.querySelectorAll(".question-body")[1].append(document.createElement("img"));
+  if (mode === "pictureQuiz") {
+    const img = new Image();
+    img.src = document.createElement("canvas").toDataURL();
+    body.querySelectorAll(".question-options")[1].querySelectorAll("label")[1].append(img);
+  }
   if (mode === "dynamicChecks" || mode === "ignoredCheck") {
     const block = body.querySelectorAll(".question-options")[1];
     block.querySelectorAll("input")[1].checked = true;

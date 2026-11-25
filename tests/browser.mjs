@@ -7,16 +7,20 @@ import {spawn} from "node:child_process";
 import {createServer} from "node:http";
 import {setTimeout as delay} from "node:timers/promises";
 import {once} from "node:events";
+import {testExam} from "./exam-cases.mjs";
 
 const temp = await mkdtemp(join(tmpdir(), "study-extension-test-"));
 const extension = join(temp, "extension");
 const fixture = await readFile(new URL("./fixture.html", import.meta.url), "base64");
+const examFixture = await readFile(new URL("./exam-fixture.html", import.meta.url), "base64");
 let releaseModel, held = false, invalid = false;
 const requests = [];
 const server = createServer(async (req,res) => {
   let body = "";
   for await (const part of req) body += part;
-  const q = JSON.parse(JSON.parse(body).messages[1].content);
+  const content = JSON.parse(body).messages[1].content;
+  const q = JSON.parse(Array.isArray(content) ? content[0].text : content);
+  if (Array.isArray(content)) q.attachments = content.slice(1);
   requests.push(q);
   if (held) await new Promise(resolve => {releaseModel = resolve;});
   const choices = invalid ? [123] : q.type === "多选" ? [1,3] : [1];
@@ -43,8 +47,9 @@ class Protocol {
           .then(() => this.send("Runtime.runIfWaitingForDebugger",{},session));
       } else if (m.method === "Fetch.requestPaused") {
         const local = m.params.resourceType === "Document" && new URL(m.params.request.url).hostname === "developer.huawei.com";
+        const page = new URL(m.params.request.url).pathname.includes("/exam-doing/") ? examFixture : fixture;
         this.send("Fetch.fulfillRequest", {requestId:m.params.requestId, responseCode:local ? 200 : 404,
-          responseHeaders:[{name:"Content-Type",value:"text/html; charset=utf-8"}], body:local ? fixture : ""}, m.sessionId);
+          responseHeaders:[{name:"Content-Type",value:"text/html; charset=utf-8"}], body:local ? page : ""}, m.sessionId);
       }
     };
   }
@@ -103,11 +108,13 @@ try {
     const tabId = await until(() => c.eval(worker,"chrome.tabs.query({url:"+JSON.stringify(url.split("?")[0]+"*")+"}).then(ts=>ts.at(-1)?.id)"));
     const command = cmd => c.eval(worker,"chrome.tabs.sendMessage("+tabId+",{command:"+JSON.stringify(cmd)+"}).catch(()=>null)");
     await until(() => command("status"),r => r?.ok);
-    return {command, session, read:js => c.eval(session,js),
+    return {command, session, targetId, read:js => c.eval(session,js),
       count:name => c.eval(session,"Number(sessionStorage.getItem("+JSON.stringify(name)+")||0)"),
       paused:() => until(() => command("status"),r => r?.ok && !r.value.running),
       done:() => until(() => command("status"),r => r?.value.done)};
   }
+  await testExam({openCase,c,worker,until,delay,requests, hold:() => {held=true;releaseModel=null;},
+    release:() => {held=false;releaseModel?.();}, waiting:() => !!releaseModel});
   const popupURL = new URL("popup.html",service.url).href;
   const popupTarget = await c.send("Target.createTarget",{url:popupURL});
   const popup = await c.attach(popupTarget.targetId);
@@ -221,7 +228,7 @@ try {
   assert.equal(await award.count("movedUnderDialog"),0);
   assert.equal(await award.count("moves"),1);
   console.log("PASS certificate dismissal, delayed final award and unrelated dialog");
-  for (const mode of ["dynamicChecks","ignoredCheck","video","marker","retry","fail","item","image","invalid","unknown","slow"]) {
+  for (const mode of ["dynamicChecks","ignoredCheck","video","marker","retry","fail","item","image","pictureQuiz","invalid","unknown","slow"]) {
     const p = await openCase(mode);
     held = mode === "slow"; invalid = mode === "invalid";
     assert((await p.command("start")).ok);
@@ -264,6 +271,11 @@ try {
       }
       await p.done();
       assert.equal(await p.count("moves"),1);
+      if (mode === "pictureQuiz") {
+        assert(requests.some(q => q.type === "多选" && q.attachments?.[0].text === "选项 2配图" &&
+          q.attachments[1]?.image_url.url.startsWith("data:image/png;base64,")));
+        assert.equal(await p.count("submits"),1);
+      }
       if (mode === "dynamicChecks") {
         assert.equal(await p.count("toggles"),3);
         assert.equal(await p.count("submits"),1);
@@ -272,7 +284,7 @@ try {
       if (mode === "retry" || mode === "item") assert.equal(await p.count("submits"),2);
       if (mode === "retry") {
         assert.equal(await p.count("retries"),1);
-        assert(requests.some(q => q.feedback.includes("未通过")));
+        assert(requests.some(q => q.feedback?.includes("未通过")));
         assert.equal(await p.read("sessionStorage.selected"),'["0","0","2"]');
       }
     }

@@ -58,6 +58,10 @@
     try {
       const result = await call(r, "navigate", {kind, mark});
       live(r);
+      if (result.examOpen) {
+        if (kind === "section") await record(r, {moving:false});
+        stop("检测到考试标签页，已暂停课件导航。交卷并离开考试页后可继续。");
+      }
       if (result.opened) {
         run = null;
         status = {...status, running:false, done:result.done, note:result.note};
@@ -104,7 +108,7 @@
     if (result.cancelled) await record(r, {moving:false});
     else if (!result.opened) status.note = "正在进入下一节";
   }
-  const payload = q => ({prompt:q.prompt, options:q.options, type:q.type});
+  const payload = q => ({prompt:q.prompt, options:q.options, type:q.type, ...(q.imageRefs.length ? {imageRefs:q.imageRefs} : {})});
   async function samePage(r, expected) {
     const v = await current(r);
     const qs = CourseUI.questions(v.quiz);
@@ -146,7 +150,9 @@
     const answers = [];
     for (const [i, q] of qs.entries()) {
       status.note = "AI 正在回答第 " + (i + 1) + " / " + qs.length + " 题";
-      const answer = await call(r, "answer", {question:payload(q), feedback:r.record.feedback || ""});
+      const question = await QuestionImages.prepare(payload(q),q.images);
+      if (q.images.length) await samePage(r,snapshot);
+      const answer = await call(r, "answer", {question, feedback:r.record.feedback || ""});
       await samePage(r, snapshot);
       answers.push(Study.indices(answer, q));
     }
@@ -328,6 +334,10 @@
       return;
     }
     if (!["status","start","pause"].includes(m.command) || sender.tab) return;
+    if (Study.examKey(location.href)) {
+      reply({ok:true,value:{exam:true,title:"考试模式",note:"请使用当前考试页题号下方的作答按钮。"}});
+      return;
+    }
     (async () => {
       if (m.command === "start") await activate("start");
       if (m.command === "pause") await pause();

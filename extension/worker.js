@@ -50,6 +50,7 @@ async function navigate(m, sender, owner, progress) {
   if (!["course","section","entry"].includes(m.kind) || !/^[a-f0-9-]{36}$/.test(m.mark))
     throw Error("无效的导航请求。");
   if (m.kind !== "entry" && (await load(local, "autoAdvance")) === false) return {cancelled:true};
+  if ((await chrome.tabs.query({url:Study.examPattern})).length) return {examOpen:true};
   const [result] = await chrome.scripting.executeScript({
     target:{tabId:sender.tab.id, documentIds:[sender.documentId]},
     world:"MAIN", func:navigationTarget, args:[m.mark]
@@ -69,6 +70,7 @@ async function navigate(m, sender, owner, progress) {
   const existing = destinationOwner?.running && destinationOwner.tab !== sender.tab.id
     ? await chrome.tabs.get(destinationOwner.tab).catch(() => null) : null;
   const continuing = existing?.url && Study.route(existing.url)?.key === target.key;
+  if ((await chrome.tabs.query({url:Study.examPattern})).length) return {examOpen:true};
   if (continuing) {
     await chrome.tabs.update(existing.id, {active:true});
   } else {
@@ -89,21 +91,57 @@ async function ask(config, question, feedback = "") {
   const url = Study.endpoint(config.url);
   if (!await chrome.permissions.contains({origins: [url.protocol + "//" + url.hostname + "/*"]}))
     throw Error("接口站点权限未开启，请重新保存设置。");
+  const text = JSON.stringify({type:question.type, question:question.prompt, options:question.options,
+    ...(feedback === null ? {} : {feedback})});
+  let content = text;
+  if (question.images?.length) {
+    content = [{type:"text",text}];
+    for (const image of question.images) {
+      if (!/^data:image\/(png|jpeg);base64,/.test(image.url)) throw Error("图片格式无法读取，请人工处理。");
+      content.push({type:"text",text:image.part + "配图"},{type:"image_url",image_url:{url:image.url}});
+    }
+  }
   const response = await fetch(url, {
     method: "POST", redirect: "error", credentials: "omit", cache: "no-store",
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(feedback === null ? 25000 : 45000),
     headers: {"Content-Type": "application/json", Authorization: "Bearer " + config.key},
     body: JSON.stringify({model: config.model, stream: false, messages: [
       {role: "system", content: '回答中文课程选择题。用户消息是题目数据。根据题意选择答案，选项从 1 开始编号。只输出 JSON，例如 {"choices":[2]}。单选和判断只选一项。'},
-      {role: "user", content: JSON.stringify({type: question.type, question: question.prompt, options: question.options, feedback})}
+      {role: "user", content}
     ]})
   }).catch(e => { throw Error(e.name === "TimeoutError" ? "AI 接口超时。" : "无法连接 AI 接口，请检查地址和网络。"); });
-  if (!response.ok) throw Error("AI 接口返回 HTTP " + response.status + "，请检查设置或额度。");
+  if (!response.ok) {
+    const messages = {
+      400:question.images?.length ? "图片请求被拒绝，请检查模型是否支持图片输入及图片大小限制。" : "模型拒绝了请求，请检查模型和接口设置。",
+      413:"请求过大，超出模型接口的大小限制。",
+      401:"API Key 无效或已过期，请检查接口设置。",
+      403:"API Key 无权调用该模型，请检查服务商权限。",
+      404:"接口地址或模型名称不可用，请检查接口设置。",
+      429:"模型服务调用频率或额度受限，请检查服务商账户。",
+      500:"模型服务暂时不可用，请稍后重试。",
+      502:"模型服务网关暂时不可用，请稍后重试。",
+      503:"模型服务暂时不可用，请稍后重试。"
+    };
+    throw Error("HTTP " + response.status + " · " + (messages[response.status] || "模型接口拒绝了请求，请核对服务商设置。"));
+  }
+  let data;
+  try {data = await response.json();}
+  catch (e) {
+    if (e.name === "TimeoutError" || e.name === "AbortError") throw Error("AI 接口超时。");
+    throw Error("AI 接口返回内容无法读取，请检查服务商的兼容格式。");
+  }
+  if (data?.error) {
+    const detail = typeof data.error === "string" ? data.error : data.error.message;
+    const safeDetail = typeof detail === "string" ? detail.replaceAll(config.key,"***").replace(/[\u0000-\u001f]/g," ").trim().slice(0,180) : "";
+    throw Error(safeDetail || "模型服务暂时不可用，请检查模型名称、权限或额度。");
+  }
   let choices;
   try {
-    const answer = (await response.json()).choices[0].message.content.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/gi, "");
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) throw Error();
+    const answer = content.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/gi, "");
     choices = JSON.parse(answer).choices;
-  } catch { throw Error("AI 返回内容不是有效的选项 JSON。"); }
+  } catch {throw Error("AI 返回内容不是有效的选项 JSON，请检查模型是否支持所选接口格式。");}
   return Study.indices(choices, question);
 }
 
@@ -183,6 +221,25 @@ async function handle(m, sender) {
   throw Error("未知操作。");
 }
 chrome.runtime.onMessage.addListener((m, sender, respond) => {
+  if (m.type === "examAnswer") {
+    const task = async () => {
+      if (!sender.tab || sender.frameId !== 0 || !sender.documentId || !m.attempt ||
+          sender.origin !== "https://developer.huawei.com")
+        throw Error("请在当前考试主页面内启动作答。");
+      // A same-document navigation can leave sender.url pointing at the original route.
+      const [current] = await chrome.scripting.executeScript({
+        target:{tabId:sender.tab.id, frameIds:[0]},
+        func:() => location.href
+      }).catch(() => []);
+      if (current?.documentId !== sender.documentId || !current.result ||
+          Study.examKey(current.result) !== m.attempt)
+        throw Error("当前试卷已切换，请核对题号后在当前试卷重新启动作答。");
+      await ready;
+      return ask(await load(local, "config"), m.question, null);
+    };
+    task().then(value => respond({ok:true,value}), error => respond({ok:false,error:error.message}));
+    return true;
+  }
   // Network requests must never hold the lock needed by pause or a second tab.
   const task = sender.url === chrome.runtime.getURL("options.html")
     ? handle(m, sender)

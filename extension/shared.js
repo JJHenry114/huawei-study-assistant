@@ -2,6 +2,13 @@
 globalThis.Study = (() => {
   const classId = "faa734fca6dd490f9ec6981b5302f238";
   const rates = [1, 1.25, 1.5, 2, 3, 4, 8, 16, 32];
+  const examPattern = "https://developer.huawei.com/consumer/cn/training/exam-doing/*";
+  function examKey(address) {
+    const url = new URL(address);
+    const match = url.pathname.match(/^\/consumer\/cn\/training\/exam-doing\/([\w-]+)\/?$/);
+    if (url.origin !== "https://developer.huawei.com" || !match) return null;
+    return JSON.stringify([match[1], url.searchParams.get("paperId"), url.searchParams.get("relationId"), url.searchParams.get("authDetailId")]);
+  }
   function playbackMode(value) {
     return value === "end" || rates.includes(value) ? value : 1;
   }
@@ -36,5 +43,5 @@ globalThis.Study = (() => {
     if (!reply?.ok) throw Error(reply?.error || "扩展后台未响应。");
     return reply.value;
   }
-  return { route, endpoint, indices, digest, rpc, classId, rates, playbackMode };
+  return { route, endpoint, indices, digest, rpc, classId, rates, playbackMode, examKey, examPattern };
 })();

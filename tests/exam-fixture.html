@@ -1,0 +1,52 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>本地考试模拟</title>
+<style>app-exam-normal-pc,app-exam-item,label.option{display:block}</style>
+<app-exam-normal-pc><div class="tips">考试已开始，请认真答题。</div><div class="question-content"></div></app-exam-normal-pc>
+<script>
+const params = new URL(location.href).searchParams;
+const total = Number(params.get("total")) || 50;
+const mode = params.get("case");
+const counter = key => {sessionStorage[key] = Number(sessionStorage[key] || 0)+1;};
+let index = Number(sessionStorage.index) || 1;
+let auto = sessionStorage.auto !== "off";
+function go(n) {index = n; sessionStorage.index = n; draw();}
+function draw() {
+  const box = document.querySelector(".question-content");
+  const multi = index%3 === 0, type = multi ? "多选" : index%3 === 1 ? "判断" : "单选";
+  const opts = multi ? ["甲","乙","丙"] : type === "判断" ? ["正确(True)","错误(False)"] : ["甲","乙"];
+  box.innerHTML = '<div class="crumb"><span>'+type+'题</span> <span class="sort">第'+index+'/'+total+'题</span> '+
+    (multi ? '' : '<span class="auto-jump">自动跳下一题 <button type="button" role="switch" aria-checked="'+auto+'">开关</button></span>')+
+    '</div><div class="question-item-container"><app-exam-item><div class="item-content"><p>模拟考试题 '+index+'</p><div class="answer">'+
+    opts.map((x,j)=>'<label class="option"><input name="answer" type="'+(multi?'checkbox':'radio')+'" value="'+(j+1)+'">'+x+'</label>').join("")+
+    '</div></div></app-exam-item></div><div class="exam-btn-group"><button type="button" id="prev">上一题</button>'+
+    (index < total ? '<button type="button" id="next">下一题</button>' : '')+
+    '<button type="button" class="submit-btn">交卷</button></div>';
+  if (index % 2 === 0) box.querySelector("p").innerHTML = "<span><pre>模拟考试题 "+index+"</pre></span>";
+  if (mode === "image" && index === 2) box.querySelector("p").append(document.createElement("img"));
+  const saved = JSON.parse(sessionStorage["q"+index] || "[]");
+  const inputs = [...box.querySelectorAll("input")];
+  inputs.forEach(el => el.checked = saved.includes(Number(el.value)));
+  const sw = box.querySelector('[role="switch"]');
+  if (sw) sw.onclick = () => {
+    if (mode === "locked") return;
+    auto = !auto; sw.setAttribute("aria-checked",String(auto)); sessionStorage.auto = auto ? "on" : "off";
+  };
+  box.querySelector(".answer").onchange = () => {
+    sessionStorage["q"+index] = JSON.stringify(inputs.filter(i=>i.checked).map(i=>Number(i.value)));
+    if (!multi && auto && index < total) {counter("autoJumps");go(index+1);}
+  };
+  if (multi) box.querySelector(".answer").onclick = event => {
+    event.preventDefault();
+    if (!event.target.matches("label") || mode === "ignored") return;
+    const n = Number(event.target.querySelector("input").value);
+    setTimeout(() => {
+      const choices = JSON.parse(sessionStorage["q"+index] || "[]");
+      sessionStorage["q"+index] = JSON.stringify(choices.includes(n) ? choices.filter(x=>x!==n) : [...choices,n]);
+      draw();
+    },90);
+  };
+  if (index < total) box.querySelector("#next").onclick = () => {counter("nextClicks");go(index+1);};
+  box.querySelector("#prev").onclick = () => go(Math.max(1,index-1));
+  box.querySelector(".submit-btn").onclick = () => counter("submitClicks");
+}
+draw();
+</script></html>

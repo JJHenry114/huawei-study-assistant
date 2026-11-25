@@ -37,9 +37,9 @@ async function refresh(command = "status") {
     el("state").textContent = state.running ? "运行中" : state.done ? "已完成" : "待命";
     el("lesson").textContent = state.title || "当前课程";
     el("note").textContent = errorMessage || state.note;
-    el("action").textContent = state.running ? "暂停" : state.title && !state.done ? "继续学习" : "开始学习";
+    el("action").textContent = state.exam ? "请在考试页内操作" : state.running ? "暂停" : state.title && !state.done ? "继续学习" : "开始学习";
     el("course").hidden = true;
-    el("action").disabled = false;
+    el("action").disabled = !!state.exam;
   } catch (e) {
     el("state").textContent = "待命";
     el("note").textContent = errorMessage || "请打开华为学堂课件。刚加载扩展时，请刷新已有的课程标签页。";

@@ -66,15 +66,16 @@ globalThis.CourseUI = (() => {
     for (const [i, block] of blocks.entries()) {
       const stem = block.querySelector(".question-body");
       const group = block.querySelector(".question-options");
-      const invalid = () => Error("第 " + (i + 1) + " 题含图片、非选择题或选项结构无法识别，请手动处理。");
+      const invalid = () => Error("第 " + (i + 1) + " 题含不支持的组件或选项结构无法识别，请手动处理。");
       if (!stem || !group || block.matches("app-subject-quiz-item") ||
-          stem.querySelector("img,svg,canvas,math,video") || group.querySelector("img,canvas,math,video")) throw invalid();
+          stem.querySelector("svg,canvas,math,video") || group.querySelector("canvas,math,video")) throw invalid();
       const labels = all(group, "label").filter(l => l.querySelector('input[type="radio"],input[type="checkbox"]'));
       const inputs = labels.map(l => l.querySelector("input"));
-      const options = labels.map(text);
+      const {prompt,options,refs,images} = QuestionImages.inspect(stem,labels,text,"第 " + (i+1) + " 题的");
+      if (all(group,"img").some(img => !images.includes(img))) throw invalid();
       if (labels.length < 2 || labels.length !== group.querySelectorAll("input").length ||
-          inputs.some(el => !enabled(el) || el.type !== inputs[0].type) || options.some(x => !x) || !text(stem)) throw invalid();
-      result.push({prompt:text(stem), type:inputs[0].type === "checkbox" ? "多选" : "单选或判断", options, inputs});
+          inputs.some(el => !enabled(el) || el.type !== inputs[0].type) || options.some(x => !x) || !prompt) throw invalid();
+      result.push({prompt, type:inputs[0].type === "checkbox" ? "多选" : "单选或判断", options, inputs,images,imageRefs:refs});
     }
     return result;
   }
